@@ -203,6 +203,58 @@ async function main() {
   
   // Send ready message to Telegram
   await telegram.sendMessage("✅ Sandbox is ready! OpenCode is running.")
+  
+  // Send initial prompt to OpenCode if context was provided
+  const initialContext = process.env.INITIAL_CONTEXT
+  const taskDescription = process.env.TASK_DESCRIPTION
+  const branchName = process.env.BRANCH_NAME
+  
+  if (initialContext || taskDescription) {
+    log("info", "Sending initial context to OpenCode", { 
+      hasContext: !!initialContext, 
+      hasTask: !!taskDescription,
+      branchName,
+    })
+    
+    // Build the instruction prompt
+    let prompt = `You are now connected to a Telegram thread for branch "${branchName || 'unknown'}".\n\n`
+    
+    if (initialContext) {
+      prompt += `## Task Context\n${initialContext}\n\n`
+    }
+    
+    if (taskDescription && !initialContext) {
+      prompt += `## Task\n${taskDescription}\n\n`
+    }
+    
+    prompt += `First, read all messages in this thread to understand the full context. Then:
+1. If a clear task or action is provided, ask any clarifying questions you need before implementing
+2. If no clear action is provided, summarize what you understand and ask how to proceed
+
+Do not start implementing until you have clarity on what needs to be done.`
+    
+    // Create session and send prompt
+    try {
+      const sessionResult = await state.server.client.session.create({
+        body: { title: `Telegram: ${branchName || 'session'}` },
+      })
+      
+      if (sessionResult.data?.id) {
+        state.sessionId = sessionResult.data.id
+        setSessionId(sessionResult.data.id, log)
+        log("info", "Created OpenCode session", { sessionId: state.sessionId })
+        
+        // Send the initial prompt
+        await state.server.client.session.prompt({
+          path: { id: state.sessionId },
+          body: { parts: [{ type: "text", text: prompt }] },
+        })
+        log("info", "Sent initial prompt to OpenCode")
+      }
+    } catch (error) {
+      log("error", "Failed to send initial context to OpenCode", { error: String(error) })
+    }
+  }
 }
 
 // =============================================================================
