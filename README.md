@@ -32,16 +32,16 @@ npm install -g opencode-telegram-mirror
    - Message [@userinfobot](https://t.me/userinfobot)
    - Copy your chat ID
 
-3. **Run the mirror**:
-   ```bash
-   opencode-telegram-mirror
-   ```
-
-4. **Configure environment variables**:
+3. **Configure environment variables**:
    ```bash
    export TELEGRAM_BOT_TOKEN="your-bot-token"
    export TELEGRAM_CHAT_ID="your-chat-id"
    # Optional: export TELEGRAM_THREAD_ID="your-thread-id"
+   ```
+
+4. **Run the mirror in your project**:
+   ```bash
+   opencode-telegram-mirror .
    ```
 
 That's it! Your OpenCode sessions will now be mirrored to Telegram.
@@ -181,7 +181,19 @@ Send messages in Telegram to interact with OpenCode:
 - **Photos**: Attached as image files to prompts
 - **Voice messages**: Transcribed via OpenAI Whisper and sent as text prompts
 - **"x"**: Interrupt the current session
-- **"/connect"**: Get the OpenCode server URL
+- **/connect**: Get the OpenCode server URL
+- **/interrupt**: Stop the current operation
+- **/plan**: Switch to plan mode
+- **/build**: Switch to build mode
+- **/review**: Review changes (accepts optional argument: commit, branch, or pr)
+- **/rename `<title>`**: Rename the session and sync to Telegram thread
+
+### Title Sync
+
+Session titles are automatically synchronized between OpenCode and Telegram:
+- **On startup**: If resuming an existing session, the thread title syncs from the session
+- **On auto-title**: When OpenCode generates a title, it updates the Telegram thread
+- **On /rename**: Manually set a title that updates both OpenCode and Telegram
 
 ### Voice Messages
 
