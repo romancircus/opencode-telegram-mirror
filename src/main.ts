@@ -20,7 +20,7 @@ import {
 	getServer,
 	type OpenCodeServer,
 } from "./opencode"
-import { TelegramClient } from "./telegram"
+import { TelegramClient, type TelegramVoice } from "./telegram"
 import { loadConfig } from "./config"
 import { createLogger } from "./log"
 import {
@@ -49,6 +49,11 @@ import {
 	createDiffFromEdit,
 	generateInlineDiffPreview,
 } from "./diff-service"
+import {
+	isVoiceTranscriptionAvailable,
+	transcribeVoice,
+	getVoiceNotSupportedMessage,
+} from "./voice"
 
 const log = createLogger()
 
@@ -206,12 +211,12 @@ async function main() {
 		botId: botInfo.id,
 	})
 
-	// Register bot commands (menu)
 	const commandsResult = await telegram.setMyCommands([
 		{ command: "interrupt", description: "Stop the current operation" },
 		{ command: "plan", description: "Switch to plan mode" },
 		{ command: "build", description: "Switch to build mode" },
 		{ command: "review", description: "Review changes [commit|branch|pr]" },
+		{ command: "rename", description: "Rename the session" },
 	])
 	if (commandsResult.status === "error") {
 		log("warn", "Failed to set bot commands", { error: commandsResult.error.message })
@@ -221,10 +226,11 @@ async function main() {
 	log("info", "Checking for existing session...")
 	let sessionId: string | null = sessionIdArg || getSessionId(log)
 
+	let initialThreadTitle: string | null = null
 	if (sessionId) {
 		log("info", "Found existing session ID, validating...", { sessionId })
 		const sessionCheck = await server.client.session.get({
-			path: { id: sessionId },
+			sessionID: sessionId,
 		})
 		if (!sessionCheck.data) {
 			log("warn", "Stored session not found on server, will create new", {
@@ -233,6 +239,7 @@ async function main() {
 			sessionId = null
 		} else {
 			log("info", "Session validated successfully", { sessionId })
+			initialThreadTitle = sessionCheck.data.title || null
 		}
 	} else {
 		log("info", "No existing session found, will create on first message")
@@ -245,13 +252,22 @@ async function main() {
 		directory,
 		chatId: config.chatId,
 		threadId: config.threadId ?? null,
-		threadTitle: null,
+		threadTitle: initialThreadTitle,
 		updatesUrl: config.updatesUrl || null,
 		botUserId: botInfo.id,
 		sessionId,
 		assistantMessageIds: new Set(),
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
+	}
+
+	if (initialThreadTitle && config.threadId) {
+		const renameResult = await telegram.editForumTopic(config.threadId, initialThreadTitle)
+		if (renameResult.status === "ok") {
+			log("info", "Synced thread title from session", { title: initialThreadTitle })
+		} else {
+			log("warn", "Failed to sync thread title", { error: renameResult.error.message })
+		}
 	}
 
 	log("info", "Bot state initialized", {
@@ -263,7 +279,6 @@ async function main() {
 		pollSource: state.updatesUrl ? "Cloudflare DO" : "Telegram API",
 	})
 
-	// Start polling for updates
 	log("info", "Starting updates poller...")
 	startUpdatesPoller(state)
 
@@ -357,10 +372,9 @@ async function main() {
 
 Do not start implementing until you have clarity on what needs to be done.`
 
-		// Create session and send prompt
 		try {
 			const sessionResult = await state.server.client.session.create({
-				body: { title: `Telegram: ${branchName || "session"}` },
+				title: `Telegram: ${branchName || "session"}`,
 			})
 
 			if (sessionResult.data?.id) {
@@ -368,10 +382,9 @@ Do not start implementing until you have clarity on what needs to be done.`
 				setSessionId(sessionResult.data.id, log)
 				log("info", "Created OpenCode session", { sessionId: state.sessionId })
 
-				// Send the initial prompt
 				await state.server.client.session.prompt({
-					path: { id: state.sessionId },
-					body: { parts: [{ type: "text", text: prompt }] },
+					sessionID: state.sessionId,
+					parts: [{ type: "text", text: prompt }],
 				})
 				log("info", "Sent initial prompt to OpenCode")
 			}
@@ -401,6 +414,13 @@ interface TelegramUpdate {
 			width: number
 			height: number
 		}>
+		voice?: {
+			file_id: string
+			file_unique_id: string
+			duration: number
+			mime_type?: string
+			file_size?: number
+		}
 		from?: { id: number; username?: string }
 		chat: { id: number }
 	}
@@ -599,7 +619,7 @@ async function handleTelegramMessage(
 	msg: NonNullable<TelegramUpdate["message"]>,
 ) {
 	const messageText = msg.text || msg.caption
-	if (!messageText && !msg.photo) return
+	if (!messageText && !msg.photo && !msg.voice) return
 
 	// Ignore all bot messages - context is sent directly via OpenCode API
 	if (msg.from?.id === state.botUserId) {
@@ -619,7 +639,7 @@ async function handleTelegramMessage(
 	if (messageText?.trim().toLowerCase() === "x") {
 		log("info", "Received interrupt command 'x'")
 		if (state.sessionId) {
-			const abortResult = await state.server.clientV2.session.abort({
+			const abortResult = await state.server.client.session.abort({
 				sessionID: state.sessionId,
 				directory: state.directory,
 			})
@@ -665,7 +685,7 @@ async function handleTelegramMessage(
 	if (messageText?.trim() === "/interrupt") {
 		log("info", "Received /interrupt command")
 		if (state.sessionId) {
-			const abortResult = await state.server.clientV2.session.abort({
+			const abortResult = await state.server.client.session.abort({
 				sessionID: state.sessionId,
 				directory: state.directory,
 			})
@@ -684,6 +704,34 @@ async function handleTelegramMessage(
 		return
 	}
 
+	const renameMatch = messageText?.trim().match(/^\/rename(?:\s+(.+))?$/)
+	if (renameMatch) {
+		const newTitle = renameMatch[1]?.trim()
+		if (!newTitle) {
+			await state.telegram.sendMessage("Usage: /rename <new title>")
+			return
+		}
+		if (!state.sessionId) {
+			await state.telegram.sendMessage("No active session to rename.")
+			return
+		}
+
+		const updateResult = await state.server.client.session.update({
+			sessionID: state.sessionId,
+			title: newTitle,
+		})
+		if (updateResult.data) {
+			state.threadTitle = newTitle
+			if (state.threadId) {
+				await state.telegram.editForumTopic(state.threadId, newTitle)
+			}
+			await state.telegram.sendMessage(`Session renamed to: ${newTitle}`)
+		} else {
+			await state.telegram.sendMessage("Failed to rename session.")
+		}
+		return
+	}
+
 	const commandMatch = messageText?.trim().match(/^\/(build|plan|review)(?:\s+(.*))?$/)
 	if (commandMatch) {
 		const [, command, args] = commandMatch
@@ -691,7 +739,7 @@ async function handleTelegramMessage(
 
 		if (!state.sessionId) {
 			const result = await state.server.client.session.create({
-				body: { title: "Telegram" },
+				title: "Telegram",
 			})
 			if (result.data) {
 				state.sessionId = result.data.id
@@ -704,7 +752,7 @@ async function handleTelegramMessage(
 			}
 		}
 
-		state.server.clientV2.session
+		state.server.client.session
 			.command({
 				sessionID: state.sessionId,
 				directory: state.directory,
@@ -721,7 +769,7 @@ async function handleTelegramMessage(
 
 	log("info", "Received message", {
 		from: msg.from?.username,
-		preview: messageText?.slice(0, 50) ?? "[photo]",
+		preview: messageText?.slice(0, 50) ?? (msg.voice ? "[voice]" : "[photo]"),
 	})
 
 	// Check for freetext answer
@@ -737,7 +785,7 @@ async function handleTelegramMessage(
 		})
 
 		if (result) {
-			await state.server.clientV2.question.reply({
+			await state.server.client.question.reply({
 				requestID: result.requestId,
 				answers: result.answers,
 			})
@@ -748,23 +796,22 @@ async function handleTelegramMessage(
 	// Cancel pending questions/permissions
 	const cancelledQ = cancelPendingQuestion(msg.chat.id, threadId)
 	if (cancelledQ) {
-		await state.server.clientV2.question.reject({
+		await state.server.client.question.reject({
 			requestID: cancelledQ.requestId,
 		})
 	}
 
 	const cancelledP = cancelPendingPermission(msg.chat.id, threadId)
 	if (cancelledP) {
-		await state.server.clientV2.permission.reply({
+		await state.server.client.permission.reply({
 			requestID: cancelledP.requestId,
 			reply: "reject",
 		})
 	}
 
-	// Create session if needed
 	if (!state.sessionId) {
 		const result = await state.server.client.session.create({
-			body: { title: "Telegram" },
+			title: "Telegram",
 		})
 
 		if (result.data) {
@@ -804,6 +851,51 @@ async function handleTelegramMessage(
 		}
 	}
 
+	if (msg.voice) {
+		if (!isVoiceTranscriptionAvailable()) {
+			await state.telegram.sendMessage(getVoiceNotSupportedMessage())
+			return
+		}
+
+		log("info", "Processing voice message", {
+			duration: msg.voice.duration,
+			fileId: msg.voice.file_id,
+		})
+
+		const fileUrlResult = await state.telegram.getFileUrl(msg.voice.file_id)
+		if (fileUrlResult.status === "error") {
+			log("error", "Failed to get voice file URL", {
+				error: fileUrlResult.error.message,
+			})
+			await state.telegram.sendMessage("Failed to download voice message.")
+			return
+		}
+
+		const audioResponse = await fetch(fileUrlResult.value)
+		if (!audioResponse.ok) {
+			log("error", "Failed to download voice file", { status: audioResponse.status })
+			await state.telegram.sendMessage("Failed to download voice message.")
+			return
+		}
+
+		const audioBuffer = await audioResponse.arrayBuffer()
+		const transcriptionResult = await transcribeVoice(audioBuffer, log)
+
+		if (transcriptionResult.status === "error") {
+			log("error", "Voice transcription failed", {
+				error: transcriptionResult.error.message,
+			})
+			await state.telegram.sendMessage(
+				`Failed to transcribe voice message: ${transcriptionResult.error.message}`
+			)
+			return
+		}
+
+		const transcribedText = transcriptionResult.value
+		log("info", "Voice transcribed", { preview: transcribedText.slice(0, 50) })
+		parts.push({ type: "text", text: transcribedText })
+	}
+
 	if (messageText) {
 		parts.push({ type: "text", text: messageText })
 	}
@@ -811,7 +903,7 @@ async function handleTelegramMessage(
 	if (parts.length === 0) return
 
 	// Send to OpenCode
-	state.server.clientV2.session
+	state.server.client.session
 		.prompt({
 			sessionID: state.sessionId,
 			directory: state.directory,
@@ -846,7 +938,7 @@ async function handleTelegramCallback(
 	if (questionResult) {
 		if ("awaitingFreetext" in questionResult) return
 
-		await state.server.clientV2.question.reply({
+		await state.server.client.question.reply({
 			requestID: questionResult.requestId,
 			answers: questionResult.answers,
 		})
@@ -860,7 +952,7 @@ async function handleTelegramCallback(
 	})
 
 	if (permResult) {
-		await state.server.clientV2.permission.reply({
+		await state.server.client.permission.reply({
 			requestID: permResult.requestId,
 			reply: permResult.reply,
 		})
@@ -888,7 +980,7 @@ async function subscribeToEvents(state: BotState) {
 	log("info", "Subscribing to OpenCode events")
 
 	try {
-		const eventsResult = await state.server.clientV2.event.subscribe(
+		const eventsResult = await state.server.client.event.subscribe(
 			{ directory: state.directory },
 			{}
 		)

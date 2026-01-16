@@ -21,6 +21,14 @@ export interface TelegramPhotoSize {
   file_size?: number
 }
 
+export interface TelegramVoice {
+  file_id: string
+  file_unique_id: string
+  duration: number
+  mime_type?: string
+  file_size?: number
+}
+
 export interface TelegramMessage {
   message_id: number
   from?: {
@@ -38,6 +46,7 @@ export interface TelegramMessage {
   text?: string
   caption?: string
   photo?: TelegramPhotoSize[]
+  voice?: TelegramVoice
   reply_to_message?: TelegramMessage
 }
 

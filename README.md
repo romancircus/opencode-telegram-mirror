@@ -6,19 +6,14 @@ A standalone bot that mirrors OpenCode sessions to Telegram topics, enabling col
 
 | Feature | Description |
 |---------|-------------|
-| **📱 Real-time Streaming** | Live OpenCode responses with typing indicators and rich formatting |
-| **🎯 Interactive Controls** | Interrupt, mode switching (plan/build), and session control via buttons |
-| **❓ Smart Questions** | Multiple-choice questions via Telegram inline buttons with freetext fallback |
-| **🔒 Permission Management** | File access permissions requested through interactive Telegram buttons |
-| **📋 Slash Commands** | `/interrupt`, `/plan`, `/build`, `/review`, `/branch` for full session control |
+| **📱 Real-time Streaming** | Live responses with typing indicators, markdown, code blocks, and inline diffs |
+| **🎯 Interactive Controls** | Buttons for questions, permissions, mode switching, and session control |
+| **📋 Slash Commands** | `/interrupt`, `/plan`, `/build`, `/review`, `/rename` for quick actions |
 | **🔍 Diff Viewer** | Automatic diff generation with syntax highlighting and shareable links |
-| **🧵 Thread Support** | Full Telegram forum thread support with topic management |
-| **📸 Media Support** | Send images and photos as prompts to OpenCode |
-| **💾 Session Persistence** | Resume coding sessions across devices and restarts |
-| **🎨 Rich Formatting** | Markdown, code blocks, inline diffs, and media previews |
+| **📸 Media Support** | Send images and voice messages (transcribed via Whisper) as prompts |
+| **🧵 Thread Support** | Telegram forum threads with automatic topic naming |
+| **💾 Session Persistence** | Resume sessions across devices and restarts |
 | **🔄 Multi-instance** | Run multiple mirrors for different sessions/channels |
-| **📊 Status Updates** | Live task progress and session state in pinned messages |
-| **🌐 Cross-platform** | Works on any device with Telegram - no app restrictions |
 
 ## Installation
 
@@ -156,6 +151,7 @@ opencode-telegram-mirror [directory] [session-id]
 | `TELEGRAM_UPDATES_URL` | Central updates endpoint for multi-instance deployments | No |
 | `TELEGRAM_SEND_URL` | Custom Telegram API endpoint (defaults to api.telegram.org) | No |
 | `OPENCODE_URL` | External OpenCode server URL (if not set, spawns local server) | No |
+| `OPENAI_API_KEY` | OpenAI API key for voice message transcription (Whisper) | No |
 
 ### Configuration Files
 
@@ -183,8 +179,19 @@ Example config file:
 Send messages in Telegram to interact with OpenCode:
 - **Text messages**: Sent as prompts to OpenCode
 - **Photos**: Attached as image files to prompts
+- **Voice messages**: Transcribed via OpenAI Whisper and sent as text prompts
 - **"x"**: Interrupt the current session
 - **"/connect"**: Get the OpenCode server URL
+
+### Voice Messages
+
+Voice messages are transcribed using OpenAI's Whisper API. To enable:
+
+1. Get an API key from [OpenAI Platform](https://platform.openai.com/api-keys)
+2. Set `OPENAI_API_KEY` in your environment
+3. Send voice messages to the bot - they'll be transcribed and sent to OpenCode
+
+If `OPENAI_API_KEY` is not set, the bot will respond with setup instructions when a voice message is received.
 
 ### Interactive Controls
 

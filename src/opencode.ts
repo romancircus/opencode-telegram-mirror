@@ -10,10 +10,6 @@ import {
   createOpencodeClient,
   type OpencodeClient,
   type Config,
-} from "@opencode-ai/sdk"
-import {
-  createOpencodeClient as createOpencodeClientV2,
-  type OpencodeClient as OpencodeClientV2,
 } from "@opencode-ai/sdk/v2"
 import { Result, TaggedError } from "better-result"
 import { createLogger } from "./log"
@@ -23,7 +19,6 @@ const log = createLogger()
 export interface OpenCodeServer {
   process: ChildProcess | null  // null when connecting to external server
   client: OpencodeClient
-  clientV2: OpencodeClientV2
   port: number
   directory: string
   baseUrl: string
@@ -115,6 +110,22 @@ async function waitForServer(
 }
 
 /**
+ * Build auth headers for OpenCode server if credentials are configured.
+ * Uses OPENCODE_SERVER_USERNAME and OPENCODE_SERVER_PASSWORD env vars.
+ * If only password is set, username defaults to "opencode".
+ */
+function getAuthHeaders(): Record<string, string> {
+  const password = process.env.OPENCODE_SERVER_PASSWORD
+  if (!password) {
+    return {}
+  }
+
+  const username = process.env.OPENCODE_SERVER_USERNAME || "opencode"
+  const credentials = btoa(`${username}:${password}`)
+  return { Authorization: `Basic ${credentials}` }
+}
+
+/**
  * Connect to an already-running OpenCode server
  */
 export async function connectToServer(
@@ -141,6 +152,14 @@ export async function connectToServer(
 
   log("info", "External server ready", { baseUrl })
 
+  const authHeaders = getAuthHeaders()
+  const hasAuth = Object.keys(authHeaders).length > 0
+  if (hasAuth) {
+    log("info", "Using basic auth for OpenCode server", {
+      username: process.env.OPENCODE_SERVER_USERNAME || "opencode",
+    })
+  }
+
   const fetchWithTimeout = (request: Request) =>
     fetch(request, {
       // @ts-ignore - bun supports timeout
@@ -149,18 +168,13 @@ export async function connectToServer(
 
   const client = createOpencodeClient({
     baseUrl,
-    fetch: fetchWithTimeout,
-  })
-
-  const clientV2 = createOpencodeClientV2({
-    baseUrl,
     fetch: fetchWithTimeout as typeof fetch,
+    headers: authHeaders,
   })
 
   server = {
     process: null,  // No process - external server
     client,
-    clientV2,
     port,
     directory,
     baseUrl,
@@ -262,18 +276,12 @@ export async function startServer(
 
   const client = createOpencodeClient({
     baseUrl,
-    fetch: fetchWithTimeout,
-  })
-
-  const clientV2 = createOpencodeClientV2({
-    baseUrl,
     fetch: fetchWithTimeout as typeof fetch,
   })
 
   server = {
     process: serverProcess,
     client,
-    clientV2,
     port,
     directory,
     baseUrl,
