@@ -83,6 +83,73 @@ async function updateStatusMessage(
   log("debug", "Status message update", { messageId, state, success })
 }
 
+/**
+ * Generate a session title using OpenCode with a lightweight model.
+ * Returns { type: "title", value: string } if successful,
+ * or { type: "unknown", value: string } if more context is needed.
+ */
+type TitleResult =
+  | { type: "unknown"; value: string }
+  | { type: "title"; value: string }
+
+async function generateSessionTitle(
+  server: OpenCodeServer,
+  userMessage: string
+): Promise<TitleResult> {
+  const tempSession = await server.client.session.create({ title: "title-gen" })
+
+  if (!tempSession.data) {
+    return { type: "unknown", value: "failed to create temp session" }
+  }
+
+  try {
+    const response = await server.client.session.prompt({
+      sessionID: tempSession.data.id,
+      model: { providerID: "opencode", modelID: "glm-4.7-free" },
+      system: `You generate short titles for coding sessions based on user messages.
+
+If the message provides enough context to understand the task, respond with:
+{"type":"title","value":"<title here>"}
+
+If the message is just a branch name, file path, or lacks context to understand what the user wants to do, respond with:
+{"type":"unknown","value":"<brief reason>"}
+
+Title rules (when generating):
+- max 50 characters
+- summarize the user's intent
+- one line, no quotes or colons
+- if a Linear ticket ID exists in the message (e.g. APP-550, ENG-123), always prefix the title with it
+
+Examples:
+- "feat/add-login" -> {"type":"unknown","value":"branch name only, need task description"}
+- "fix the auth bug in login.ts" -> {"type":"title","value":"Fix auth bug in login"}
+- "src/components/Button.tsx" -> {"type":"unknown","value":"file path only, need task description"}
+- "add dark mode toggle to settings" -> {"type":"title","value":"Add dark mode toggle to settings"}
+- "APP-550: fix auth bug" -> {"type":"title","value":"APP-550: Fix auth bug"}
+- "feat/APP-123-add-user-profile" -> {"type":"unknown","value":"branch name only, need task description"}
+- "working on APP-123 to add user profiles" -> {"type":"title","value":"APP-123: Add user profiles"}
+- "https://linear.app/team/issue/ENG-456/fix-button" -> {"type":"title","value":"ENG-456: Fix button"}
+
+Respond with only valid JSON, nothing else.`,
+      parts: [{ type: "text", text: userMessage }],
+    })
+
+    const textPart = response.data?.parts?.find(
+      (p: { type: string }) => p.type === "text"
+    ) as { type: "text"; text: string } | undefined
+    const text = textPart?.text?.trim() || ""
+
+    try {
+      return JSON.parse(text) as TitleResult
+    } catch {
+      // If LLM didn't return valid JSON, treat response as title
+      return { type: "title", value: text.slice(0, 50) }
+    }
+  } finally {
+    await server.client.session.delete({ sessionID: tempSession.data.id })
+  }
+}
+
 interface BotState {
 	server: OpenCodeServer;
 	telegram: TelegramClient;
@@ -94,6 +161,7 @@ interface BotState {
 	updatesUrl: string | null;
 	botUserId: number | null;
 	sessionId: string | null;
+	needsTitle: boolean;
 
 	assistantMessageIds: Set<string>;
 	pendingParts: Map<string, Part[]>;
@@ -260,6 +328,7 @@ async function main() {
 		updatesUrl: config.updatesUrl || null,
 		botUserId: botInfo.id,
 		sessionId,
+		needsTitle: !initialThreadTitle,
 		assistantMessageIds: new Set(),
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
@@ -384,6 +453,7 @@ Do not start implementing until you have clarity on what needs to be done.`
 
 			if (sessionResult.data?.id) {
 				state.sessionId = sessionResult.data.id
+				state.needsTitle = true
 				setSessionId(sessionResult.data.id, log)
 				log("info", "Created OpenCode session", { sessionId: state.sessionId })
 
@@ -748,6 +818,7 @@ async function handleTelegramMessage(
 			})
 			if (result.data) {
 				state.sessionId = result.data.id
+				state.needsTitle = true
 				setSessionId(result.data.id, log)
 				log("info", "Created session for command", { sessionId: result.data.id })
 			} else {
@@ -821,6 +892,7 @@ async function handleTelegramMessage(
 
 		if (result.data) {
 			state.sessionId = result.data.id
+			state.needsTitle = true
 			setSessionId(result.data.id, log)
 			log("info", "Created session", { sessionId: result.data.id })
 		} else {
@@ -926,6 +998,38 @@ async function handleTelegramMessage(
 		})
 
 	log("info", "Prompt sent", { sessionId: state.sessionId })
+
+	if (state.needsTitle && state.sessionId) {
+		const textContent = parts
+			.filter((p): p is { type: "text"; text: string } => p.type === "text")
+			.map((p) => p.text)
+			.join("\n")
+
+		if (textContent) {
+			generateSessionTitle(state.server, textContent)
+				.then(async (result) => {
+					if (result.type === "title" && state.sessionId) {
+						log("info", "Generated session title", { title: result.value })
+						const updateResult = await state.server.client.session.update({
+							sessionID: state.sessionId,
+							title: result.value,
+						})
+						if (updateResult.data) {
+							state.threadTitle = result.value
+							state.needsTitle = false
+							if (state.threadId) {
+								await state.telegram.editForumTopic(state.threadId, result.value)
+							}
+						}
+					} else {
+						log("debug", "Title generation deferred", { reason: result.value })
+					}
+				})
+				.catch((err) => {
+					log("error", "Title generation failed", { error: String(err) })
+				})
+		}
+	}
 }
 
 async function handleTelegramCallback(
