@@ -289,6 +289,7 @@ async function main() {
 		{ command: "build", description: "Switch to build mode" },
 		{ command: "review", description: "Review changes [commit|branch|pr]" },
 		{ command: "rename", description: "Rename the session" },
+		{ command: "version", description: "Show mirror bot version" },
 	])
 	if (commandsResult.status === "error") {
 		log("warn", "Failed to set bot commands", { error: commandsResult.error.message })
@@ -767,6 +768,19 @@ async function handleTelegramMessage(
 		return
 	}
 
+	if (messageText?.trim() === "/version") {
+		const pkg = await import("../package.json")
+		const sendResult = await state.telegram.sendMessage(
+			`opencode-telegram-mirror v${pkg.version}`
+		)
+		if (sendResult.status === "error") {
+			log("error", "Failed to send version response", {
+				error: sendResult.error.message,
+			})
+		}
+		return
+	}
+
 	if (messageText?.trim() === "/interrupt") {
 		log("info", "Received /interrupt command")
 		if (state.sessionId) {
@@ -859,7 +873,7 @@ async function handleTelegramMessage(
 	})
 
 	// Check for freetext answer
-	const threadId = state.threadId ?? 0
+	const threadId = state.threadId ?? null
 
 	if (isAwaitingFreetext(msg.chat.id, threadId) && messageText) {
 		const result = await handleFreetextAnswer({
@@ -1470,7 +1484,7 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		}
 	}
 
-	const threadId = state.threadId ?? 0
+	const threadId = state.threadId ?? null
 
 	if (ev.type === "question.asked") {
 		await showQuestionButtons({
