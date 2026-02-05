@@ -91,6 +91,46 @@ export async function loadConfig(directory: string, log?: LogFn): Promise<Config
     envOverrides.push("TELEGRAM_SEND_URL")
   }
 
+  // Schedule configuration
+  if (process.env.SCHEDULE_START) {
+    ;(config as Record<string, unknown>).scheduleStart = process.env.SCHEDULE_START
+    envOverrides.push("SCHEDULE_START")
+  }
+  if (process.env.SCHEDULE_END) {
+    ;(config as Record<string, unknown>).scheduleEnd = process.env.SCHEDULE_END
+    envOverrides.push("SCHEDULE_END")
+  }
+  if (process.env.SCHEDULE_TIMEZONE) {
+    ;(config as Record<string, unknown>).scheduleTimezone = process.env.SCHEDULE_TIMEZONE
+    envOverrides.push("SCHEDULE_TIMEZONE")
+  }
+  if (process.env.SCHEDULE_MODE) {
+    ;(config as Record<string, unknown>).scheduleMode = process.env.SCHEDULE_MODE
+    envOverrides.push("SCHEDULE_MODE")
+  }
+
+  // Filter configuration
+  if (process.env.FILTER_MODE) {
+    ;(config as Record<string, unknown>).filterMode = process.env.FILTER_MODE
+    envOverrides.push("FILTER_MODE")
+  }
+  if (process.env.FILTER_TOPICS) {
+    ;(config as Record<string, unknown>).filterTopics = process.env.FILTER_TOPICS
+    envOverrides.push("FILTER_TOPICS")
+  }
+  if (process.env.FILTER_KEYWORDS) {
+    ;(config as Record<string, unknown>).filterKeywords = process.env.FILTER_KEYWORDS
+    envOverrides.push("FILTER_KEYWORDS")
+  }
+  if (process.env.FILTER_REGEX) {
+    ;(config as Record<string, unknown>).filterRegex = process.env.FILTER_REGEX
+    envOverrides.push("FILTER_REGEX")
+  }
+  if (process.env.FILTER_ENABLED) {
+    ;(config as Record<string, unknown>).filterEnabled = process.env.FILTER_ENABLED === "true"
+    envOverrides.push("FILTER_ENABLED")
+  }
+
   if (envOverrides.length > 0) {
     log?.("info", "Environment variable overrides applied", { variables: envOverrides })
   }

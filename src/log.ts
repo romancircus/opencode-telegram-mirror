@@ -8,6 +8,8 @@ export type LogFn = (
   extra?: Record<string, unknown>
 ) => void
 
+export type Logger = LogFn
+
 export function createLogger(): LogFn {
   return (level, message, extra) => {
     const timestamp = new Date().toISOString()
