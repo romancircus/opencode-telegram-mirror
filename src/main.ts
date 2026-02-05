@@ -54,6 +54,10 @@ import {
 	transcribeVoice,
 	getVoiceNotSupportedMessage,
 } from "./voice"
+import { SessionManager } from "./session-manager"
+import { Scheduler, loadScheduleConfigFromEnv } from "./scheduler"
+import { FilterEngine, loadFilterConfigFromEnv } from "./filter-engine"
+import { processCommand, isCommand, type CommandContext } from "./commands"
 
 const log = createLogger()
 
@@ -170,6 +174,10 @@ interface BotState {
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
 	>;
+
+	sessionManager: SessionManager;
+	scheduler: Scheduler;
+	filterEngine: FilterEngine;
 }
 
 async function main() {
@@ -290,6 +298,12 @@ async function main() {
 		{ command: "review", description: "Review changes [commit|branch|pr]" },
 		{ command: "rename", description: "Rename the session" },
 		{ command: "version", description: "Show mirror bot version" },
+		{ command: "enable", description: "Enable mirroring for this session" },
+		{ command: "disable", description: "Disable mirroring for this session" },
+		{ command: "session", description: "Session management [list|switch|stop]" },
+		{ command: "schedule", description: "Schedule settings [status|set|mode]" },
+		{ command: "filter", description: "Filter settings [status|add|remove|mode]" },
+		{ command: "help", description: "Show all available commands" },
 	])
 	if (commandsResult.status === "error") {
 		log("warn", "Failed to set bot commands", { error: commandsResult.error.message })
@@ -318,6 +332,44 @@ async function main() {
 		log("info", "No existing session found, will create on first message")
 	}
 
+	// Initialize control layer components
+	log("info", "Initializing control layer...")
+	const stateDir = process.env.HOME
+		? `${process.env.HOME}/.opencode-mirror`
+		: "/tmp/.opencode-mirror"
+
+	// Initialize session manager
+	const sessionManager = new SessionManager(stateDir, log)
+	await sessionManager.loadState()
+
+	// Start session tracking if we have a session ID
+	if (sessionId) {
+		sessionManager.startSession(sessionId, directory)
+		sessionManager.enableSession(sessionId)
+		log("info", "Session tracking enabled", { sessionId })
+	}
+
+	// Initialize scheduler
+	const scheduleConfig = loadScheduleConfigFromEnv()
+	const scheduler = new Scheduler(scheduleConfig, log)
+	await scheduler.loadState()
+	log("info", "Scheduler initialized", {
+		mode: scheduler.getMode(),
+		schedule: `${scheduler.getScheduleConfig().start}-${scheduler.getScheduleConfig().end}`,
+		timezone: scheduler.getScheduleConfig().timezone,
+	})
+
+	// Initialize filter engine
+	const filterConfig = loadFilterConfigFromEnv()
+	const filterEngine = new FilterEngine(filterConfig, stateDir, log)
+	await filterEngine.loadState()
+	log("info", "Filter engine initialized", {
+		enabled: filterEngine.getStatus().enabled,
+		mode: filterEngine.getStatus().mode,
+		topicCount: filterEngine.getStatus().topics.length,
+		keywordCount: filterEngine.getStatus().keywords.length,
+	})
+
 	const state: BotState = {
 		server,
 		telegram,
@@ -334,6 +386,9 @@ async function main() {
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
 		typingIndicators: new Map(),
+		sessionManager,
+		scheduler,
+		filterEngine,
 	}
 
 	if (initialThreadTitle && config.threadId) {
@@ -363,6 +418,13 @@ async function main() {
 
 	process.on("SIGINT", async () => {
 		log("info", "Received SIGINT, shutting down gracefully...")
+		
+		// Save control layer state
+		log("info", "Saving control layer state...")
+		await state.sessionManager.saveState()
+		await state.scheduler.saveState()
+		await state.filterEngine.saveState()
+		
 		const stopResult = await stopServer()
 		if (stopResult.status === "error") {
 			log("error", "Shutdown failed", { error: stopResult.error.message })
@@ -373,6 +435,13 @@ async function main() {
 
 	process.on("SIGTERM", async () => {
 		log("info", "Received SIGTERM, shutting down gracefully...")
+		
+		// Save control layer state
+		log("info", "Saving control layer state...")
+		await state.sessionManager.saveState()
+		await state.scheduler.saveState()
+		await state.filterEngine.saveState()
+		
 		const stopResult = await stopServer()
 		if (stopResult.status === "error") {
 			log("error", "Shutdown failed", { error: stopResult.error.message })
@@ -719,6 +788,30 @@ async function handleTelegramMessage(
 			stateThreadId: state.threadId,
 		})
 		return
+	}
+
+	// Process control commands
+	if (messageText && isCommand(msg)) {
+		log("info", "Processing control command", { text: messageText.slice(0, 50) })
+		
+		const context: CommandContext = {
+			sessionManager: state.sessionManager,
+			scheduler: state.scheduler,
+			filterEngine: state.filterEngine,
+			sessionId: state.sessionId || "unknown",
+			workingDir: state.directory,
+			log,
+		}
+		
+		const result = await processCommand(msg, context)
+		if (result) {
+			await state.telegram.sendMessage(result.message)
+			log("info", "Command processed", { 
+				success: result.success, 
+				shouldMirror: result.shouldMirror 
+			})
+			return
+		}
 	}
 
 	// Handle "x" as interrupt (like double-escape in opencode TUI)
@@ -1166,6 +1259,46 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		ev.properties?.part?.sessionID ??
 		ev.properties?.session?.id
 	const sessionTitle = ev.properties?.session?.title
+
+	// Control layer checks
+	if (sessionId) {
+		// Check if session exists and is active
+		const session = state.sessionManager.getSession(sessionId)
+		
+		// If we have a session ID and it's not being tracked, start tracking it
+		if (!session && sessionId === state.sessionId) {
+			state.sessionManager.startSession(sessionId, state.directory)
+			state.sessionManager.enableSession(sessionId)
+			log("debug", "Auto-started session tracking", { sessionId })
+		}
+		
+		// Check if mirroring is enabled for this session
+		if (session && !session.isActive) {
+			log("debug", "Skipping event - session disabled", { sessionId, type: ev.type })
+			return
+		}
+		
+		// Check schedule (only if not in manual mode or if auto mode)
+		if (!state.scheduler.shouldMirror()) {
+			log("debug", "Skipping event - outside schedule", { sessionId, type: ev.type })
+			return
+		}
+		
+		// Check filters for message content
+		if (ev.type === "message.part.updated" && ev.properties.part) {
+			const part = ev.properties.part
+			const content = part.content || {}
+			const text = typeof content === "string" ? content : JSON.stringify(content)
+			
+			if (!state.filterEngine.shouldMirror({ 
+				topic: sessionTitle || undefined,
+				text: text
+			})) {
+				log("debug", "Skipping event - filtered out", { sessionId, partType: part.type })
+				return
+			}
+		}
+	}
 
 	// Log errors in full and send to Telegram
 	if (ev.type === "session.error") {
