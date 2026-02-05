@@ -54,6 +54,7 @@ import {
 	transcribeVoice,
 	getVoiceNotSupportedMessage,
 } from "./voice"
+import { detectHandoffIntent, getHandoffContext, type HandoffIntent } from "./handoff-detector"
 
 const log = createLogger()
 
@@ -163,6 +164,11 @@ interface BotState {
 	sessionId: string | null;
 	needsTitle: boolean;
 
+	// Handoff/mirroring state
+	isMirroringToTelegram: boolean;
+	lastUserMessage: string | null;
+	currentTask: string | null;
+
 	assistantMessageIds: Set<string>;
 	pendingParts: Map<string, Part[]>;
 	sentPartIds: Set<string>;
@@ -176,6 +182,10 @@ async function main() {
 	const path = await import("node:path")
 	const directory = path.resolve(process.argv[2] || process.cwd())
 	const sessionIdArg = process.argv[3]
+
+	// Load env vars early for state initialization
+	const taskDescription = process.env.TASK_DESCRIPTION
+	const branchName = process.env.BRANCH_NAME
 
 	log("info", "=== Telegram Mirror Bot Starting ===")
 	log("info", "Startup parameters", {
@@ -330,6 +340,10 @@ async function main() {
 		botUserId: botInfo.id,
 		sessionId,
 		needsTitle: !initialThreadTitle,
+		// Handoff state
+		isMirroringToTelegram: false,
+		lastUserMessage: null,
+		currentTask: taskDescription || branchName || null,
 		assistantMessageIds: new Set(),
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
@@ -352,6 +366,8 @@ async function main() {
 		threadTitle: state.threadTitle ?? "(unknown)",
 		sessionId: state.sessionId || "(pending)",
 		pollSource: state.updatesUrl ? "Cloudflare DO" : "Telegram API",
+		mirroringEnabled: state.isMirroringToTelegram,
+		currentTask: state.currentTask ?? "(none)",
 	})
 
 	log("info", "Starting updates poller...")
@@ -387,6 +403,7 @@ async function main() {
 		pollSource: state.updatesUrl ? "Cloudflare DO" : "Telegram API",
 		updatesUrl: state.updatesUrl || "(using Telegram API)",
 	})
+	log("info", "Natural language handoff enabled - say 'continue on Telegram' or 'back on OpenCode'")
 
 	// Signal the worker that we're ready - it will update the status message with tunnel URL
 	const workerWsUrl = process.env.WORKER_WS_URL
@@ -420,8 +437,6 @@ async function main() {
 
 	// Send initial prompt to OpenCode if context was provided
 	const initialContext = process.env.INITIAL_CONTEXT
-	const taskDescription = process.env.TASK_DESCRIPTION
-	const branchName = process.env.BRANCH_NAME
 
 	if (initialContext || taskDescription) {
 		log("info", "Sending initial context to OpenCode", {
@@ -721,6 +736,30 @@ async function handleTelegramMessage(
 		return
 	}
 
+	// Check for natural language handoff triggers
+	if (messageText) {
+		const handoff = detectHandoffIntent(messageText)
+		if (handoff.type === "to_telegram") {
+			log("info", "Handoff to Telegram detected", {
+				confidence: handoff.confidence,
+				matchedPhrase: handoff.matchedPhrase,
+			})
+			state.isMirroringToTelegram = true
+			const context = getHandoffContext(state.currentTask, state.lastUserMessage)
+			await state.telegram.sendMessage(`🔄 ${context}\n\nMirroring to Telegram enabled. Continue here and I'll forward everything to OpenCode.`)
+			return
+		}
+		if (handoff.type === "to_opencode") {
+			log("info", "Handoff to OpenCode detected", {
+				confidence: handoff.confidence,
+				matchedPhrase: handoff.matchedPhrase,
+			})
+			state.isMirroringToTelegram = false
+			await state.telegram.sendMessage("✅ Welcome back! Continuing on OpenCode. Mirroring to Telegram disabled.")
+			return
+		}
+	}
+
 	// Handle "x" as interrupt (like double-escape in opencode TUI)
 	if (messageText?.trim().toLowerCase() === "x") {
 		log("info", "Received interrupt command 'x'")
@@ -870,7 +909,13 @@ async function handleTelegramMessage(
 	log("info", "Received message", {
 		from: msg.from?.username,
 		preview: messageText?.slice(0, 50) ?? (msg.voice ? "[voice]" : "[photo]"),
+		mirroring: state.isMirroringToTelegram,
 	})
+
+	// Track last message for handoff context
+	if (messageText) {
+		state.lastUserMessage = messageText
+	}
 
 	// Check for freetext answer
 	const threadId = state.threadId ?? null
