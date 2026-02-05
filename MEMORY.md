@@ -38,17 +38,19 @@
 | Agent | Trigger | Best For | Output |
 |-------|---------|----------|--------|
 | **Cyrus** | Delegate Linear issue to "Cyrus" | Defined tasks, night shift, batch work | PRs linked to issues |
+| **jinyang** | Label `jinyang:auto` | Parallel execution, multi-provider fallback | PRs with phase tracking |
 | **Claude Code** | `claude` in terminal | Complex work, real-time steering, debugging | Direct code changes |
 | **Clawdbot** | Telegram/Discord | Mobile access, quick checks, daily summaries | Answers, actions |
 
 **Daily Flow:**
 1. Morning: Clawdbot daily summary → see what's pending
 2. Deep work: Claude Code for complex tasks
-3. Queue work: Create Linear issues, delegate to Cyrus
+3. Queue work: Create Linear issues, delegate to Cyrus or label with `jinyang:auto`
 4. Damien time: Cyrus works the queue while away
 5. Evening: Review Cyrus PRs, merge or give feedback
 
 **Cyrus has Juvenal's soul** - it spawns Claude Code which reads `~/.claude/CLAUDE.md`.
+**jinyang** uses OpenCode SDK natively with multi-tier provider routing (OpenCode GLM-4.7 → Claude Code → Claude API).
 
 ## Key Repos
 

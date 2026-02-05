@@ -150,6 +150,58 @@ Full debugging guide: `~/.cyrus/DEBUGGING.md`
 - `~/.cyrus/config.json` - repo configs
 - `/etc/systemd/system/cyrus.service` - systemd service
 
+## jinyang AI Agent (Successor to Cyrus)
+
+**Service:** `jinyang.service` (user service)  
+**Port:** 3001  
+**Webhook URL:** https://solapsvs.taila4c432.ts.net:3001/webhooks/linear  
+**Status:** Multi-tier provider routing with auto-fallback
+
+### Quick Commands
+
+```bash
+# Check status
+systemctl --user status jinyang
+
+# Restart
+systemctl --user restart jinyang
+
+# Live logs
+journalctl --user -u jinyang -f
+```
+
+### Key Differences from Cyrus
+
+| Feature | Cyrus | jinyang |
+|---------|-------|---------|
+| AI Provider | Claude SDK (Anthropic only) | OpenCode SDK + 3-tier fallback |
+| Port | 3456 | 3001 |
+| Execution Labels | `cyrus:auto` | `jinyang:auto` |
+| Provider Routing | Single | Multi-tier (OpenCode → Claude → Claude API) |
+| Language | JavaScript | TypeScript |
+
+### When to Use jinyang
+
+- **Multi-provider reliability** - Automatically fails over if one AI provider is down
+- **Cost optimization** - Uses free OpenCode models as primary, paid as fallback
+- **Parallel execution** - Better concurrency handling
+- **OpenCode compatibility** - Native OpenCode SDK integration
+
+### Key Files
+
+- `~/Applications/jinyang/.env` - environment variables
+- `~/Applications/jinyang/config/default.json` - repository routing
+- `~/.config/systemd/user/jinyang.service` - systemd user service
+- `~/.jinyang/sessions/` - active session tracking
+- `~/.jinyang/providers/status.json` - provider health status
+
+### Migration from Cyrus
+
+jinyang reuses Cyrus configuration:
+- Repository routing from `~/.cyrus/config.json`
+- Same webhook secret and Linear integration
+- Just change delegate from "Cyrus" to "jinyang" and labels from `cyrus:auto` to `jinyang:auto`
+
 ## Proton Mail Access
 
 **Canonical Location:** `~/.clawdbot/skills/proton-mail/` (symlink to `/home/romancircus/repos/solapsvs-meltbot/skills/proton-mail/`)
