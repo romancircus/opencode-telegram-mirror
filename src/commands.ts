@@ -70,7 +70,7 @@ registerCommand("disable", (_args, context): CommandResult => {
  */
 registerCommand("session", (args, context): CommandResult => {
   const subcommand = args[0]?.toLowerCase()
-  const sessions = context.sessionManager.getAllSessions()
+  const sessions = context.sessionManager.listSessions()
 
   if (!subcommand || subcommand === "list") {
     if (sessions.length === 0) {
@@ -82,9 +82,9 @@ registerCommand("session", (args, context): CommandResult => {
 
     const sessionList = sessions
       .map((s, i) => {
-        const status = s.isActive ? "🟢" : "🔴"
-        const current = s.id === context.sessionId ? " ← you are here" : ""
-        return `${i + 1}. ${status} ${s.id.slice(0, 8)}... (${s.workingDir.split("/").pop()})${current}`
+        const status = s.enabled ? "🟢" : "🔴"
+        const current = s.sessionId === context.sessionId ? " ← you are here" : ""
+        return `${i + 1}. ${status} ${s.sessionId.slice(0, 8)}... (${s.directory.split("/").pop()})${current}`
       })
       .join("\n")
 
@@ -106,7 +106,7 @@ registerCommand("session", (args, context): CommandResult => {
     const targetSession = sessions[index]
     return {
       success: true,
-      message: `🔄 Switched to session ${targetSession.id.slice(0, 8)}...\n\nWorking dir: ${targetSession.workingDir}`,
+      message: `🔄 Switched to session ${targetSession.sessionId.slice(0, 8)}...\n\nWorking dir: ${targetSession.directory}`,
     }
   }
 
@@ -120,11 +120,11 @@ registerCommand("session", (args, context): CommandResult => {
     }
 
     const targetSession = sessions[index]
-    context.sessionManager.stopSession(targetSession.id)
+    context.sessionManager.stopSession(targetSession.sessionId)
 
     return {
       success: true,
-      message: `🛑 Stopped session ${targetSession.id.slice(0, 8)}...`,
+      message: `🛑 Stopped session ${targetSession.sessionId.slice(0, 8)}...`,
     }
   }
 
@@ -141,7 +141,7 @@ registerCommand("schedule", (args, context): CommandResult => {
   const subcommand = args[0]?.toLowerCase()
 
   if (!subcommand || subcommand === "status") {
-    const config = context.scheduler.getScheduleConfig()
+    const config = context.scheduler.getConfig()
     const mode = context.scheduler.getMode()
     const withinSchedule = context.scheduler.isWithinSchedule()
 

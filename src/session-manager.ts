@@ -35,25 +35,29 @@ interface PersistedState {
   globalSettings: GlobalSettings
 }
 
-const STATE_DIR = `${process.env.HOME}/.opencode-mirror`
-const STATE_FILE = `${STATE_DIR}/state.json`
+const DEFAULT_STATE_DIR = `${process.env.HOME}/.opencode-mirror`
+const DEFAULT_STATE_FILE = `${DEFAULT_STATE_DIR}/state.json`
 
 export class SessionManager {
   private sessions: Map<string, SessionState>
   private globalSettings: GlobalSettings
   private logger: Logger
+  private stateDir: string
+  private stateFile: string
 
-  constructor(logger?: Logger) {
+  constructor(stateDir?: string, logger?: Logger) {
     this.sessions = new Map()
     this.globalSettings = {}
     this.logger = logger || log
+    this.stateDir = stateDir || DEFAULT_STATE_DIR
+    this.stateFile = `${this.stateDir}/state.json`
     this.loadState()
   }
 
-  private loadState(): void {
+  loadState(): void {
     try {
-      if (existsSync(STATE_FILE)) {
-        const data = readFileSync(STATE_FILE, "utf-8")
+      if (existsSync(this.stateFile)) {
+        const data = readFileSync(this.stateFile, "utf-8")
         const parsed: PersistedState = JSON.parse(data)
         this.sessions = new Map(parsed.sessions.map(s => [s.sessionId, s]))
         this.globalSettings = parsed.globalSettings || {}
@@ -67,16 +71,16 @@ export class SessionManager {
     }
   }
 
-  private saveState(): void {
+  saveState(): void {
     try {
-      if (!existsSync(STATE_DIR)) {
-        mkdirSync(STATE_DIR, { recursive: true })
+      if (!existsSync(this.stateDir)) {
+        mkdirSync(this.stateDir, { recursive: true })
       }
       const state: PersistedState = {
         sessions: Array.from(this.sessions.values()),
         globalSettings: this.globalSettings,
       }
-      writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))
+      writeFileSync(this.stateFile, JSON.stringify(state, null, 2))
     } catch (error) {
       this.logger("error", "Failed to save session state", { error: String(error) })
     }
@@ -162,6 +166,10 @@ export class SessionManager {
     return Array.from(this.sessions.values())
   }
 
+  getAllSessions(): SessionState[] {
+    return this.listSessions()
+  }
+
   getActiveSessions(): SessionState[] {
     return this.listSessions().filter(s => s.enabled)
   }
@@ -195,7 +203,6 @@ export class SessionManager {
     return true
   }
 
-  // Global settings
   getGlobalSettings(): GlobalSettings {
     return { ...this.globalSettings }
   }
@@ -205,7 +212,6 @@ export class SessionManager {
     this.saveState()
   }
 
-  // Convenience: Check if session should mirror
   shouldMirror(sessionId: string): boolean {
     const session = this.sessions.get(sessionId)
     if (!session) return false
@@ -213,7 +219,6 @@ export class SessionManager {
   }
 }
 
-// Singleton instance for shared state
 let globalSessionManager: SessionManager | null = null
 
 export function getSessionManager(): SessionManager {
