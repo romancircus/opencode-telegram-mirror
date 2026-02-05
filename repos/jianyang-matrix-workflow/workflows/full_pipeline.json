@@ -1,0 +1,203 @@
+{
+  "version": "0.1.0-draft",
+  "status": "PRELIMINARY - PENDING RESEARCH",
+  "description": "Complete Jian Yang Matrix transformation pipeline",
+  "pipeline": {
+    "stages": [
+      {
+        "name": "outline_extraction",
+        "workflow": "01_outline_extraction.json",
+        "description": "Extract character edges"
+      },
+      {
+        "name": "matrix_effect",
+        "workflow": "02_matrix_effect.json",
+        "description": "Apply Matrix falling code"
+      },
+      {
+        "name": "crt_aesthetic",
+        "workflow": "03_crt_aesthetic.json",
+        "description": "Add CRT monitor effects"
+      }
+    ],
+    "chaining": {
+      "mode": "sequential",
+      "intermediate_outputs": true,
+      "output_dir": "OUTPUT_DIR/stages/"
+    }
+  },
+  "nodes": {
+    "1": {
+      "id": 1,
+      "type": "LoadVideo",
+      "inputs": {
+        "video_path": "INPUT_VIDEO_PATH"
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Source: Jian Yang character video"
+    },
+    "10": {
+      "id": 10,
+      "type": "CannyEdgeDetection",
+      "inputs": {
+        "image": ["1", 0],
+        "low_threshold": 0.35,
+        "high_threshold": 0.55
+      },
+      "outputs": ["EDGES"]
+    },
+    "11": {
+      "id": 11,
+      "type": "ColorCorrect",
+      "inputs": {
+        "image": ["10", 0],
+        "color_hex": "#00FF41"
+      },
+      "outputs": ["IMAGE"]
+    },
+    "12": {
+      "id": 12,
+      "type": "AlphaBlend",
+      "inputs": {
+        "foreground": ["11", 0],
+        "background": ["1", 0],
+        "opacity": 0.85
+      },
+      "outputs": ["OUTLINED"]
+    },
+    "20": {
+      "id": 20,
+      "type": "MatrixCodeGenerator",
+      "inputs": {
+        "width": 1920,
+        "height": 1080,
+        "frames": "MATCH_INPUT",
+        "code_density": 0.5,
+        "fall_speed": 25
+      },
+      "outputs": ["MATRIX_LAYER"]
+    },
+    "21": {
+      "id": 21,
+      "type": "DepthEstimation",
+      "inputs": {
+        "image": ["12", 0]
+      },
+      "outputs": ["DEPTH_MAP"]
+    },
+    "22": {
+      "id": 22,
+      "type": "DepthMaskedBlend",
+      "inputs": {
+        "foreground": ["20", 0],
+        "background": ["12", 0],
+        "depth_map": ["21", 0],
+        "far_opacity": 0.75,
+        "near_opacity": 0.35
+      },
+      "outputs": ["MATRIX_APPLIED"]
+    },
+    "23": {
+      "id": 23,
+      "type": "GlowEffect",
+      "inputs": {
+        "image": ["22", 0],
+        "radius": 6,
+        "intensity": 0.4
+      },
+      "outputs": ["IMAGE"]
+    },
+    "30": {
+      "id": 30,
+      "type": "Scanlines",
+      "inputs": {
+        "image": ["23", 0],
+        "line_spacing": 3,
+        "opacity": 0.3
+      },
+      "outputs": ["IMAGE"]
+    },
+    "31": {
+      "id": 31,
+      "type": "ChromaticAberration",
+      "inputs": {
+        "image": ["30", 0],
+        "red_offset": [2, 0],
+        "blue_offset": [-2, 0],
+        "strength": 0.4
+      },
+      "outputs": ["IMAGE"]
+    },
+    "32": {
+      "id": 32,
+      "type": "BarrelDistortion",
+      "inputs": {
+        "image": ["31", 0],
+        "strength": 0.08
+      },
+      "outputs": ["IMAGE"]
+    },
+    "33": {
+      "id": 33,
+      "type": "Vignette",
+      "inputs": {
+        "image": ["32", 0],
+        "strength": 0.4
+      },
+      "outputs": ["IMAGE"]
+    },
+    "34": {
+      "id": 34,
+      "type": "GrainOverlay",
+      "inputs": {
+        "image": ["33", 0],
+        "intensity": 0.08
+      },
+      "outputs": ["FINAL"]
+    },
+    "99": {
+      "id": 99,
+      "type": "SaveVideo",
+      "inputs": {
+        "images": ["34", 0],
+        "output_path": "OUTPUT_PATH",
+        "fps": 30,
+        "format": "mp4"
+      }
+    }
+  },
+  "optimized_parameters": {
+    "character_preservation": {
+      "edge_threshold_low": 0.35,
+      "edge_threshold_high": 0.55,
+      "matrix_near_opacity": 0.35,
+      "matrix_far_opacity": 0.75,
+      "matrix_density": 0.5,
+      "notes": "Balanced for character recognition + aesthetic"
+    },
+    "quality_presets": {
+      "high_quality": {
+        "resolution": "1920x1080",
+        "fps": 30,
+        "matrix_density": 0.55,
+        "edge_threshold": 0.35,
+        "processing_time": "~5min per minute of video"
+      },
+      "fast_preview": {
+        "resolution": "1280x720",
+        "fps": 24,
+        "matrix_density": 0.45,
+        "edge_threshold": 0.45,
+        "processing_time": "~2min per minute of video"
+      }
+    }
+  },
+  "notes": [
+    "FULL PIPELINE - PRELIMINARY VERSION",
+    "All parameters pending MATRIX_RESEARCH validation",
+    "Priority order: Character visibility > Matrix aesthetic > CRT effects",
+    "Test with 5-10 second clips before full video processing",
+    "Monitor depth masking: Character face should be CLEARLY visible",
+    "If character becomes obscured at any stage, reduce that stage's intensity"
+  ]
+}

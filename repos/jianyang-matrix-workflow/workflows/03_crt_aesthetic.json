@@ -1,0 +1,171 @@
+{
+  "version": "0.1.0-draft",
+  "status": "PRELIMINARY - PENDING RESEARCH",
+  "description": "CRT monitor aesthetic post-processing",
+  "nodes": {
+    "1": {
+      "id": 1,
+      "type": "LoadVideo",
+      "inputs": {
+        "video_path": "INPUT_VIDEO_PATH"
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Load Matrix effect video from stage 2"
+    },
+    "2": {
+      "id": 2,
+      "type": "Scanlines",
+      "inputs": {
+        "image": ["1", 0],
+        "line_spacing": 3,
+        "line_weight": 1,
+        "opacity": 0.3,
+        "color": "#000000"
+      },
+      "outputs": ["IMAGE"],
+      "notes": "CRT horizontal scanlines"
+    },
+    "3": {
+      "id": 3,
+      "type": "ChromaticAberration",
+      "inputs": {
+        "image": ["2", 0],
+        "red_offset": [2, 0],
+        "green_offset": [0, 0],
+        "blue_offset": [-2, 0],
+        "strength": 0.4
+      },
+      "outputs": ["IMAGE"],
+      "notes": "RGB color separation (CRT misalignment effect)"
+    },
+    "4": {
+      "id": 4,
+      "type": "BarrelDistortion",
+      "inputs": {
+        "image": ["3", 0],
+        "strength": 0.08,
+        "center": [0.5, 0.5]
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Slight screen curvature"
+    },
+    "5": {
+      "id": 5,
+      "type": "Vignette",
+      "inputs": {
+        "image": ["4", 0],
+        "strength": 0.4,
+        "radius": 0.7,
+        "color": "#000000"
+      },
+      "outputs": ["IMAGE"],
+      "notes": "CRT edge darkening"
+    },
+    "6": {
+      "id": 6,
+      "type": "PixelFlicker",
+      "inputs": {
+        "image": ["5", 0],
+        "frequency": 0.02,
+        "intensity": 0.05,
+        "noise_type": "temporal"
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Subtle phosphor decay/flicker"
+    },
+    "7": {
+      "id": 7,
+      "type": "ScreenReflection",
+      "inputs": {
+        "image": ["6", 0],
+        "reflection_opacity": 0.15,
+        "reflection_blur": 8,
+        "angle": 45
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Subtle screen reflection for realism"
+    },
+    "8": {
+      "id": 8,
+      "type": "GrainOverlay",
+      "inputs": {
+        "image": ["7", 0],
+        "grain_size": 1.5,
+        "intensity": 0.08,
+        "color": false
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Film grain for analog feel"
+    },
+    "9": {
+      "id": 9,
+      "type": "SaveVideo",
+      "inputs": {
+        "images": ["8", 0],
+        "output_path": "OUTPUT_PATH",
+        "fps": 30,
+        "format": "mp4",
+        "codec": "h264",
+        "quality": 23
+      },
+      "notes": "Export final CRT aesthetic video"
+    }
+  },
+  "parameters": {
+    "scanlines": {
+      "spacing": {
+        "default": 3,
+        "range": [2, 6],
+        "description": "Pixels between scanlines (2-4 = fine CRT, 4-6 = old monitor)"
+      },
+      "opacity": {
+        "default": 0.3,
+        "range": [0.1, 0.5],
+        "description": "Scanline visibility"
+      }
+    },
+    "chromatic_aberration": {
+      "offset": {
+        "default": 2,
+        "range": [1, 5],
+        "description": "RGB separation distance in pixels"
+      },
+      "strength": {
+        "default": 0.4,
+        "range": [0.1, 0.8],
+        "description": "Effect intensity - KEEP LOW to preserve clarity"
+      }
+    },
+    "distortion": {
+      "barrel_strength": {
+        "default": 0.08,
+        "range": [0.0, 0.2],
+        "description": "Screen curvature amount (subtle = realistic)"
+      }
+    },
+    "atmosphere": {
+      "vignette_strength": {
+        "default": 0.4,
+        "range": [0.2, 0.7],
+        "description": "Edge darkening"
+      },
+      "flicker_intensity": {
+        "default": 0.05,
+        "range": [0.0, 0.15],
+        "description": "Phosphor flicker (subtle recommended)"
+      },
+      "grain_intensity": {
+        "default": 0.08,
+        "range": [0.0, 0.2],
+        "description": "Film grain amount"
+      }
+    }
+  },
+  "notes": [
+    "DRAFT WORKFLOW - Effect intensities pending research",
+    "All effects must preserve character visibility",
+    "Chromatic aberration: Keep strength under 0.5 to avoid blur",
+    "Scanlines: 20-30% opacity max to maintain clarity",
+    "Test with sample frames to ensure character recognition intact"
+  ]
+}

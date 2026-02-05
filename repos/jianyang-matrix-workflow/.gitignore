@@ -1,0 +1,40 @@
+# Outputs
+examples/reference_outputs/*.mp4
+examples/reference_outputs/*.png
+*.mp4
+*.avi
+*.mov
+
+# Intermediate files
+stages/
+temp/
+*.tmp
+
+# ComfyUI specific
+input/
+output/
+temp/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+
+# System
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*

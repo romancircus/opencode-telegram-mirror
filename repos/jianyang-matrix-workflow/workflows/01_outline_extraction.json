@@ -1,0 +1,105 @@
+{
+  "version": "0.1.0-draft",
+  "status": "PRELIMINARY - PENDING RESEARCH",
+  "description": "Character outline extraction with facial feature preservation",
+  "nodes": {
+    "1": {
+      "id": 1,
+      "type": "LoadVideo",
+      "inputs": {
+        "video_path": "INPUT_VIDEO_PATH"
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Load source video (Jian Yang character)"
+    },
+    "2": {
+      "id": 2,
+      "type": "CannyEdgeDetection",
+      "inputs": {
+        "image": ["1", 0],
+        "low_threshold": 0.3,
+        "high_threshold": 0.5,
+        "edge_mode": "preserve_detail"
+      },
+      "outputs": ["EDGES"],
+      "notes": "Edge detection - CRITICAL: Preserve facial features"
+    },
+    "3": {
+      "id": 3,
+      "type": "ColorCorrect",
+      "inputs": {
+        "image": ["2", 0],
+        "color_hex": "#00FF41",
+        "mode": "tint"
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Matrix green color (#00FF41 = terminal green)"
+    },
+    "4": {
+      "id": 4,
+      "type": "LineWeighting",
+      "inputs": {
+        "image": ["3", 0],
+        "weight": 2.5,
+        "smooth": true
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Adjust line thickness (2-4px recommended)"
+    },
+    "5": {
+      "id": 5,
+      "type": "AlphaBlend",
+      "inputs": {
+        "foreground": ["4", 0],
+        "background": ["1", 0],
+        "opacity": 0.85,
+        "blend_mode": "normal"
+      },
+      "outputs": ["IMAGE"],
+      "notes": "Composite outline over original - character must remain visible"
+    },
+    "6": {
+      "id": 6,
+      "type": "SaveVideo",
+      "inputs": {
+        "images": ["5", 0],
+        "output_path": "OUTPUT_PATH",
+        "fps": 30,
+        "format": "mp4"
+      },
+      "notes": "Export outlined video"
+    }
+  },
+  "parameters": {
+    "edge_detection": {
+      "low_threshold": {
+        "default": 0.3,
+        "range": [0.1, 0.7],
+        "description": "Lower = more detail preserved. CRITICAL for facial features."
+      },
+      "high_threshold": {
+        "default": 0.5,
+        "range": [0.2, 0.9],
+        "description": "Upper edge boundary. Keep 0.2 above low_threshold."
+      }
+    },
+    "appearance": {
+      "line_weight": {
+        "default": 2.5,
+        "range": [1, 5],
+        "description": "Edge line thickness in pixels"
+      },
+      "opacity": {
+        "default": 0.85,
+        "range": [0.5, 1.0],
+        "description": "Outline visibility"
+      }
+    }
+  },
+  "notes": [
+    "DRAFT WORKFLOW - Parameters pending MATRIX_RESEARCH findings",
+    "Priority: Character recognition > aesthetic effect",
+    "Facial features must remain clearly visible",
+    "Test with sample frames before processing full video"
+  ]
+}

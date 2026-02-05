@@ -158,6 +158,46 @@ Add new fixture files to `test/fixtures/` as JSON arrays of updates in the DO fo
 - Do not commit `dist/` or `node_modules/`.
 - Root build output goes to `dist/` (see `tsconfig.json`).
 
+## 📋 LINEAR-FIRST OPERATING MANDATE (2026-02-05)
+
+**LINEAR IS MY TASK MANAGEMENT SYSTEM - NOT YOURS**
+
+**MANDATORY RULE:**
+When user requests ANY deliverable work:
+1. **CREATE LINEAR TASK IMMEDIATELY** before starting work
+2. **UPDATE task status** as work progresses
+3. **CLOSE task** only when deliverable complete and verified
+4. **CHECK LINEAR** before responding to status requests
+
+**Why Linear matters:**
+- It's MY dashboard to track what I'm working on
+- Prevents dropping balls when context switches
+- Lets ME see all active work in one place
+- Coordinates agent swarms with clear dependencies
+
+**Linear commands:**
+```bash
+# Create task (MANDATORY at start)
+~/.clawdbot/scripts/linear/create-issue.sh --title "Task" --team "Romancircus" --description "Details" --priority 1
+
+# Check MY active tasks (use this often!)
+~/.clawdbot/scripts/linear/list-issues.sh --state "In Progress"
+
+# Update progress
+~/.clawdbot/scripts/linear/update-issue.sh ROM-XXX --state "In Progress"
+
+# Complete task
+~/.clawdbot/scripts/linear/update-issue.sh ROM-XXX --state "Done"
+```
+
+**FAILURE PATTERN TO AVOID:**
+❌ Starting work without Linear task
+❌ Saying "in progress" without checking Linear
+❌ Completing work without closing Linear task
+❌ Treating Linear as reporting tool instead of MY operating system
+
+**Linear is how I don't drop balls. Use it ALWAYS.**
+
 ## Code Organization
 - Prefer small helpers over large monolithic functions.
 - Keep side effects near the edges (IO, network).
@@ -194,3 +234,52 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 ```
 
 <!-- opensrc:end -->
+
+## Linear Native Enforcement (2026-02-05)
+
+**STATUS: ACTIVE — 17 repos now enforce Linear-first workflows**
+
+### What Changed
+- **BLOCK mode active**: Commits without `ROM-XXX` reference are rejected
+- **19 whitelist patterns**: Maintenance commits (deps, lint, docs) bypass requirement
+- **SOTA verification**: All commits validated against Linear issue state
+
+### Normal Workflow
+1. **Start work**: `linear create_issue` → get ROM-XXX identifier
+2. **Make changes**: Code, test, verify
+3. **Commit**: `git commit -m "feat: Description (ROM-XXX)"` — **MUST include ROM-XXX**
+4. **Push**: Pre-commit hook validates Linear reference exists and is valid
+5. **Close**: Update Linear issue to Done when work complete
+
+### Emergency Override
+If you must commit without Linear reference:
+```bash
+git commit -m "fix: Critical hotfix (ROM-OVERRIDE)" --no-verify
+```
+**⚠️ Use sparingly** — override commits are logged and reviewed.
+
+### Enforcement Coverage
+| Repo Count | Mode | Whitelist Patterns |
+|------------|------|-------------------|
+| 17 repos | BLOCK | 19 patterns |
+
+**Whitelisted prefixes:** `chore(deps):`, `style:`, `docs:`, `ci:`, `test:`, `refactor:`, `perf:`
+
+**What gets blocked:**
+- `feat:`, `fix:` without ROM-XXX
+- Any commit claiming to reference non-existent ROM-XXX issue
+- Commits referencing closed/cancelled issues
+
+### Troubleshooting
+```bash
+# Check if repo has enforcement
+ls .git/hooks/commit-msg
+
+# Test your commit message
+~/.clawdbot/scripts/linear/validate-commit-msg.sh "feat: New feature (ROM-123)"
+
+# See active issues
+linear list_issues --state "In Progress" --assignee me
+```
+
+**Rule: If it delivers value, it needs a Linear issue. No exceptions.**
