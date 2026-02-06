@@ -9,6 +9,7 @@ A standalone bot that mirrors OpenCode sessions to Telegram topics, enabling col
 | **📱 Real-time Streaming** | Live responses with typing indicators, markdown, code blocks, and inline diffs |
 | **🎯 Interactive Controls** | Buttons for questions, permissions, mode switching, and session control |
 | **📋 Slash Commands** | `/interrupt`, `/plan`, `/build`, `/review`, `/rename` for quick actions |
+| **🗣️ Natural Language Handoff** | Switch between OpenCode and Telegram using natural phrases - no commands needed |
 | **🔍 Diff Viewer** | Automatic diff generation with syntax highlighting and shareable links |
 | **📸 Media Support** | Send images and voice messages (transcribed via Whisper) as prompts |
 | **🧵 Thread Support** | Telegram forum threads with automatic title sync from OpenCode sessions |
@@ -173,6 +174,37 @@ Example config file:
 ```
 
 ## Advanced Features
+
+### Natural Language Handoff
+
+Switch seamlessly between OpenCode and Telegram using natural language - no commands required.
+
+**Moving to Telegram (continue on your phone):**
+Simply say things like:
+- "continue on Telegram"
+- "switch to my phone"
+- "I need to go" / "I have to run"
+- "I'm heading out"
+- "brb" / "be right back"
+- "continue on mobile"
+
+When detected, the bot will:
+1. Enable mirroring mode
+2. Send a context summary to Telegram
+3. Forward all future messages to OpenCode
+
+**Returning to OpenCode (back at your computer):**
+Say things like:
+- "back on OpenCode"
+- "I'm back"
+- "back at my desk"
+- "back to work"
+- "let's continue here"
+
+When detected, the bot will:
+1. Disable mirroring mode
+2. Confirm you're back on OpenCode
+3. Resume normal bidirectional sync
 
 ### Session Control
 
