@@ -586,7 +586,7 @@ interface TelegramUpdate {
 	message?: {
 		message_id: number
 		message_thread_id?: number
-		date?: number
+		date: number
 		text?: string
 		caption?: string
 		photo?: Array<{
@@ -612,8 +612,8 @@ interface TelegramUpdate {
 			file_unique_id: string
 			duration: number
 		}
-		from?: { id: number; username?: string }
-		chat: { id: number }
+		from?: { id: number; first_name: string; username?: string; is_bot?: boolean }
+		chat: { id: number; type: string }
 	}
 	callback_query?: import("./telegram").CallbackQuery
 }
@@ -1357,7 +1357,7 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		}
 		
 		// Check if mirroring is enabled for this session
-		if (session && !session.isActive) {
+		if (session && !session.enabled) {
 			log("debug", "Skipping event - session disabled", { sessionId, type: ev.type })
 			return
 		}
@@ -1371,8 +1371,7 @@ async function handleOpenCodeEvent(state: BotState, ev: OpenCodeEvent) {
 		// Check filters for message content
 		if (ev.type === "message.part.updated" && ev.properties.part) {
 			const part = ev.properties.part
-			const content = part.content || {}
-			const text = typeof content === "string" ? content : JSON.stringify(content)
+			const text = "text" in part && typeof part.text === "string" ? part.text : ""
 			
 			if (!state.filterEngine.shouldMirror({ 
 				topic: sessionTitle || undefined,

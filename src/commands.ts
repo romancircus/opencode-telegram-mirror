@@ -170,7 +170,7 @@ registerCommand("schedule", (args, context): CommandResult => {
       }
     }
 
-    context.scheduler.updateSchedule({ start, end })
+    context.scheduler.updateSchedule(start, end)
 
     return {
       success: true,

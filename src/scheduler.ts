@@ -33,7 +33,7 @@ export class Scheduler {
       mode: config?.mode || (process.env.SCHEDULE_MODE as "auto" | "manual") || "manual",
     }
 
-    this.logger("info", "Scheduler initialized", this.config)
+    this.logger("info", "Scheduler initialized", { ...this.config })
   }
 
   private parseTime(timeStr: string): { hour: number; minute: number } {
@@ -97,7 +97,7 @@ export class Scheduler {
     this.config.endTime = endTime
     this.config.start = startTime
     this.config.end = endTime
-    this.logger("info", "Schedule updated", this.config)
+    this.logger("info", "Schedule updated", { ...this.config })
   }
 
   setMode(mode: "auto" | "manual"): void {
