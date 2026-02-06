@@ -108,38 +108,7 @@ zellij list-sessions
 
 **Web UI token:** `~/.config/zellij/web-token.txt`
 
-## Cyrus AI Agent (Legacy)
-
-**Service:** `cyrus.service`
-**Port:** 3456
-**Webhook URL:** https://solapsvs.taila4c432.ts.net/webhook
-
-### Quick Commands
-```bash
-sudo systemctl status cyrus      # Check status
-sudo systemctl restart cyrus     # Restart
-sudo journalctl -u cyrus -f      # Live logs
-```
-
-### Documentation
-Full debugging guide: `~/.cyrus/DEBUGGING.md`
-
-### Repository Routing
-- Add `repo:kdh`, `repo:pokedex`, `repo:roblox`, `repo:goat`, or `repo:comfyui` labels
-- Or use `[repo=RepoName]` in issue description
-- Default catch-all: "General" (~/Applications)
-
-### Common Issues
-1. **No webhooks received**: Check Tailscale Funnel (`tailscale funnel status`)
-2. **Signature errors**: Patch is applied (WARN in logs = working)
-3. **"Which repository?"**: Add a routing label or it routes to General
-
-### Key Files
-- `~/.cyrus/.env` - secrets
-- `~/.cyrus/config.json` - repo configs
-- `/etc/systemd/system/cyrus.service` - systemd service
-
-## jinyang AI Agent (Successor to Cyrus)
+## jinyang AI Agent
 
 **Service:** `jinyang.service` (user service)
 **Port:** 3001
@@ -154,22 +123,17 @@ systemctl --user restart jinyang
 journalctl --user -u jinyang -f
 ```
 
-### Key Differences from Cyrus
+### Capabilities
 
-| Feature | Cyrus | jinyang |
-|---------|-------|---------|
-| AI Provider | Claude SDK (Anthropic only) | OpenCode SDK + 3-tier fallback |
-| Port | 3456 | 3001 |
-| Execution Labels | `cyrus:auto` | `jinyang:auto` |
-| Provider Routing | Single | Multi-tier (OpenCode -> Claude -> Claude API) |
-| Language | JavaScript | TypeScript |
+- **Multi-provider reliability** — auto-failover if one AI provider is down
+- **Cost optimization** — free OpenCode models as primary, paid as fallback
+- **Parallel execution** — concurrent agent handling
+- **OpenCode compatibility** — native OpenCode SDK integration
 
-### When to Use jinyang
-
-- **Multi-provider reliability** - Automatically fails over if one AI provider is down
-- **Cost optimization** - Uses free OpenCode models as primary, paid as fallback
-- **Parallel execution** - Better concurrency handling
-- **OpenCode compatibility** - Native OpenCode SDK integration
+### Repository Routing
+- Add `repo:kdh`, `repo:pokedex`, `repo:roblox`, `repo:goat`, or `repo:comfyui` labels
+- Or use `[repo=RepoName]` in issue description
+- Execution label: `jinyang:auto`
 
 ### Key Files
 
@@ -178,13 +142,6 @@ journalctl --user -u jinyang -f
 - `~/.config/systemd/user/jinyang.service` - systemd user service
 - `~/.jinyang/sessions/` - active session tracking
 - `~/.jinyang/providers/status.json` - provider health status
-
-### Migration from Cyrus
-
-jinyang reuses Cyrus configuration:
-- Repository routing from `~/.cyrus/config.json`
-- Same webhook secret and Linear integration
-- Just change delegate from "Cyrus" to "jinyang" and labels from `cyrus:auto` to `jinyang:auto`
 
 ## Proton Mail - Full Configuration
 

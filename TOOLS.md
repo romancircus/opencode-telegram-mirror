@@ -27,7 +27,6 @@ python3 ~/.clawdbot/skills/proton-mail/email_cli.py list|read|search|send
 Account: romancircus@pm.me
 
 ## Agent Services
-| Agent | Port | Delegate Label | Status |
-|-------|------|---------------|--------|
-| jinyang | 3001 | jinyang:auto | Primary |
-| Cyrus | 3456 | cyrus:auto | Legacy |
+| Agent | Port | Delegate Label |
+|-------|------|---------------|
+| jinyang | 3001 | jinyang:auto |
