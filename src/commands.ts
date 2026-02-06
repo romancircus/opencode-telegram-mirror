@@ -349,6 +349,7 @@ registerCommand("help", (_args): CommandResult => {
       `/filter mode <whitelist|blacklist> - Set mode\n` +
       `/filter reset - Clear all filters\n\n` +
       `Other:\n` +
+      `/fresh - Start a fresh session (reset context)\n` +
       `/help - Show this message`,
   }
 })

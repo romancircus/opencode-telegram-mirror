@@ -55,6 +55,7 @@ import {
 	getVoiceNotSupportedMessage,
 } from "./voice"
 import { detectHandoffIntent, getHandoffContext, type HandoffIntent } from "./handoff-detector"
+import { getSystemMessage } from "./system-message"
 import { SessionManager } from "./session-manager"
 import { Scheduler, loadScheduleConfigFromEnv } from "./scheduler"
 import { FilterEngine, loadFilterConfigFromEnv } from "./filter-engine"
@@ -155,6 +156,52 @@ Respond with only valid JSON, nothing else.`,
   }
 }
 
+async function createFreshSession(
+  state: BotState,
+  options?: { title?: string }
+): Promise<string | null> {
+  const title = options?.title || "Telegram"
+  log("info", "Creating fresh session", { title })
+
+  try {
+    const result = await state.server.client.session.create({ title })
+    if (!result.data?.id) {
+      log("error", "Failed to create session - no ID returned")
+      return null
+    }
+
+    const newSessionId = result.data.id
+    state.sessionId = newSessionId
+    state.needsTitle = title === "Telegram"
+    setSessionId(newSessionId, log)
+    state.sessionManager.startSession(newSessionId, state.directory)
+    state.sessionManager.enableSession(newSessionId)
+
+    // Clear runtime state from previous session
+    state.assistantMessageIds.clear()
+    state.pendingParts.clear()
+    state.sentPartIds.clear()
+    for (const [, entry] of state.typingIndicators) {
+      if (entry.timeout) clearTimeout(entry.timeout)
+      entry.stop()
+    }
+    state.typingIndicators.clear()
+
+    // Regenerate system message with new session ID
+    state.systemMessage = getSystemMessage({
+      sessionId: newSessionId,
+      chatId: state.chatId,
+      threadId: state.threadId ?? undefined,
+    })
+
+    log("info", "Fresh session created", { sessionId: newSessionId })
+    return newSessionId
+  } catch (error) {
+    log("error", "Failed to create fresh session", { error: String(error) })
+    return null
+  }
+}
+
 interface BotState {
 	server: OpenCodeServer;
 	telegram: TelegramClient;
@@ -180,6 +227,8 @@ interface BotState {
 		string,
 		{ stop: () => void; timeout: ReturnType<typeof setTimeout> | null; mode: "idle" | "tool" }
 	>;
+
+	systemMessage: string;
 
 	sessionManager: SessionManager;
 	scheduler: Scheduler;
@@ -313,6 +362,7 @@ async function main() {
 		{ command: "session", description: "Session management [list|switch|stop]" },
 		{ command: "schedule", description: "Schedule settings [status|set|mode]" },
 		{ command: "filter", description: "Filter settings [status|add|remove|mode]" },
+		{ command: "fresh", description: "Start a fresh session (reset context)" },
 		{ command: "help", description: "Show all available commands" },
 	])
 	if (commandsResult.status === "error") {
@@ -400,6 +450,11 @@ async function main() {
 		pendingParts: new Map(),
 		sentPartIds: new Set(),
 		typingIndicators: new Map(),
+		systemMessage: getSystemMessage({
+			sessionId: sessionId || "pending",
+			chatId: config.chatId,
+			threadId: config.threadId ?? undefined,
+		}),
 		sessionManager,
 		scheduler,
 		filterEngine,
@@ -504,53 +559,19 @@ async function main() {
 		}
 	}
 
-	// Send initial prompt to OpenCode if context was provided
-	const initialContext = process.env.INITIAL_CONTEXT
+	// Create initial session if task context provided (CLAUDE.md is read by OpenCode natively)
+	if (taskDescription || branchName) {
+		const title = `Telegram: ${branchName || "session"}`
+		const newSessionId = await createFreshSession(state, { title })
 
-	if (initialContext || taskDescription) {
-		log("info", "Sending initial context to OpenCode", {
-			hasContext: !!initialContext,
-			hasTask: !!taskDescription,
-			branchName,
-		})
-
-		// Build the instruction prompt
-		let prompt = `You are now connected to a Telegram thread for branch "${branchName || "unknown"}".\n\n`
-
-		if (initialContext) {
-			prompt += `## Task Context\n${initialContext}\n\n`
-		}
-
-		if (taskDescription && !initialContext) {
-			prompt += `## Task\n${taskDescription}\n\n`
-		}
-
-		prompt += `Read any context/description (if present). Then:
-1. If a clear task or action is provided, ask any clarifying questions you need before implementing.
-2. If no clear action/context is provided, ask how to proceed.
-
-Do not start implementing until you have clarity on what needs to be done.`
-
-		try {
-			const sessionResult = await state.server.client.session.create({
-				title: `Telegram: ${branchName || "session"}`,
-			})
-
-			if (sessionResult.data?.id) {
-				state.sessionId = sessionResult.data.id
-				state.needsTitle = true
-				setSessionId(sessionResult.data.id, log)
-				log("info", "Created OpenCode session", { sessionId: state.sessionId })
-
-				await state.server.client.session.prompt({
-					sessionID: state.sessionId,
-					parts: [{ type: "text", text: prompt }],
-				})
-				log("info", "Sent initial prompt to OpenCode")
-			}
-		} catch (error) {
-			log("error", "Failed to send initial context to OpenCode", {
-				error: String(error),
+		if (newSessionId && taskDescription) {
+			state.server.client.session.prompt({
+				sessionID: newSessionId,
+				directory: state.directory,
+				system: state.systemMessage,
+				parts: [{ type: "text", text: `Task: ${taskDescription}` }],
+			}).catch((err) => {
+				log("error", "Failed to send task prompt", { error: String(err) })
 			})
 		}
 	}
@@ -963,22 +984,47 @@ async function handleTelegramMessage(
 		return
 	}
 
+	if (messageText?.trim() === "/fresh") {
+		log("info", "Received /fresh command")
+
+		if (state.sessionId) {
+			try {
+				await state.server.client.session.abort({
+					sessionID: state.sessionId,
+					directory: state.directory,
+				})
+			} catch (err) {
+				log("warn", "Failed to abort old session", { error: String(err) })
+			}
+			try {
+				await state.server.client.session.delete({
+					sessionID: state.sessionId,
+				})
+			} catch (err) {
+				log("warn", "Failed to delete old session", { error: String(err) })
+			}
+			state.sessionManager.stopSession(state.sessionId)
+		}
+
+		const newSessionId = await createFreshSession(state)
+		if (newSessionId) {
+			await state.telegram.sendMessage(
+				`Fresh session created: ${newSessionId.slice(0, 8)}...\nContext reset. Ready for instructions.`
+			)
+		} else {
+			await state.telegram.sendMessage("Failed to create fresh session.")
+		}
+		return
+	}
+
 	const commandMatch = messageText?.trim().match(/^\/(build|plan|review)(?:\s+(.*))?$/)
 	if (commandMatch) {
 		const [, command, args] = commandMatch
 		log("info", "Received command", { command, args })
 
 		if (!state.sessionId) {
-			const result = await state.server.client.session.create({
-				title: "Telegram",
-			})
-			if (result.data) {
-				state.sessionId = result.data.id
-				state.needsTitle = true
-				setSessionId(result.data.id, log)
-				log("info", "Created session for command", { sessionId: result.data.id })
-			} else {
-				log("error", "Failed to create session for command")
+			const newSessionId = await createFreshSession(state)
+			if (!newSessionId) {
 				await state.telegram.sendMessage("Failed to create session.")
 				return
 			}
@@ -986,7 +1032,7 @@ async function handleTelegramMessage(
 
 		state.server.client.session
 			.command({
-				sessionID: state.sessionId,
+				sessionID: state.sessionId!,
 				directory: state.directory,
 				command,
 				arguments: args || "",
@@ -1048,17 +1094,9 @@ async function handleTelegramMessage(
 	}
 
 	if (!state.sessionId) {
-		const result = await state.server.client.session.create({
-			title: "Telegram",
-		})
-
-		if (result.data) {
-			state.sessionId = result.data.id
-			state.needsTitle = true
-			setSessionId(result.data.id, log)
-			log("info", "Created session", { sessionId: result.data.id })
-		} else {
-			log("error", "Failed to create session")
+		const newSessionId = await createFreshSession(state)
+		if (!newSessionId) {
+			log("error", "Failed to create session for message")
 			return
 		}
 	}
@@ -1160,8 +1198,9 @@ async function handleTelegramMessage(
 	// Send to OpenCode
 	state.server.client.session
 		.prompt({
-			sessionID: state.sessionId,
+			sessionID: state.sessionId!,
 			directory: state.directory,
+			system: state.systemMessage,
 			parts,
 		})
 		.catch((err) => {
