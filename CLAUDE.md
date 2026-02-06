@@ -1,85 +1,43 @@
 # Claude Code Instructions for clawd
 
-## MANDATORY: Read AGENTS.md First
+## PROJECT GOAL
 
-Before ANY work in this repo: Read `AGENTS.md` for cross-agent compliance.
-AGENTS.md is symlinked to CLAUDE.md — single source of truth across all repos and tools.
+Clawdbot workspace — Telegram bot brain, session management, and OpenCode mirror for the Roman Circus autonomous agent ecosystem.
 
-**Critical guardrails**:
+## Critical Guardrails
+
 - **Token cost**: Blocking wait ($0.20) vs polling loop ($20-40) = 100x savings
 - **MCP vs Direct API**: <10 workflows use MCP, >10 use templates + urllib
 - **Pre-commit hooks**: Automatically block anti-patterns (git-enforced)
-
----
-
-## PROJECT GOAL
-
-[1-2 sentence description of repo purpose]
-
----
+- **Bootstrap budget**: Keep workspace bootstrap files <2,000 tokens total (SOTA threshold)
 
 ## Execution Tasks
 
-**For multi-phase overnight work, use the centralized orchestration pattern.**
-
-### Quick Start
-
-1. **Copy template:**
-   ```bash
-   cp ~/.cyrus/templates/execution_script_template.py scripts/<task_name>_execute.py
-   ```
-
-2. **Implement phases** as `OrchestrationScript` subclass
-
-3. **Create Linear issue** from template:
-   ```bash
-   cat ~/.cyrus/templates/linear_execution_issue.md
-   ```
-
-4. **Validate before delegating:**
-   ```bash
-   python ~/.cyrus/scripts/validate_execution_issue.py ROM-XXX
-   ```
-
-5. **Delegate to jinyang** — execution happens automatically
-
-### Resources
+For multi-phase overnight work, use single orchestration scripts (NOT multiple Linear issues with blockedBy).
 
 - **Template:** `~/.cyrus/templates/execution_script_template.py`
 - **Docs:** `~/.cyrus/docs/EXECUTION_PATTERN.md`
-- **Issue template:** `~/.cyrus/templates/linear_execution_issue.md`
-
-**DON'T:** Create multiple Linear issues with `blockedBy` (doesn't auto-trigger)
-**DO:** Single issue, single orchestration script, all phases sequential
-
----
+- **Validate:** `python ~/.cyrus/scripts/validate_execution_issue.py ROM-XXX`
 
 ## Project Structure
 
 ```
-[Describe key directories and files]
+clawd/
+├── src/           # OpenCode Telegram mirror bot (TypeScript)
+├── docs/          # Architecture docs, brain design
+├── canvas/        # Creative assets
+├── memory/        # Daily logs (YYYY-MM-DD.md)
+├── research/      # Research notes
+├── SOUL.md        # Persona/tone (bootstrapped)
+├── USER.md        # Human profile (bootstrapped)
+├── IDENTITY.md    # Name/creature/vibe (bootstrapped)
+├── TOOLS.md       # Quick reference (bootstrapped)
+├── TOOLS-REFERENCE.md  # Full config details (on-demand)
+└── MEMORY.md      # Long-term memory
 ```
 
----
+## Development
 
-## Development Workflow
-
-### Testing
-```bash
-[test commands]
-```
-
-### Building
-```bash
-[build commands]
-```
-
----
-
-## Hard-Won Lessons
-
-[Document institutional knowledge here as it accumulates]
-
----
-
-*Last updated: 2026-02-06*
+- **Typecheck:** `bun run typecheck`
+- **Build:** `bun run build`
+- **The running bot is clawdbot** (separate npm package), NOT `src/main.ts`
